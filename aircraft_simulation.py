@@ -309,10 +309,20 @@ def animate_simulation(
 
     vertices = model.vertices
     faces = model.faces
-    mesh = Poly3DCollection([], facecolor="lightgray", edgecolor="black", linewidth=0.2, alpha=0.9)
+    mesh = Poly3DCollection(
+        [], facecolor="lightgray", edgecolor="black", linewidth=0.2, alpha=0.9
+    )
     ax.add_collection3d(mesh)
 
     path_line, = ax.plot([], [], [], color="tab:blue", lw=1.5, label="Flight Path")
+
+    # Heading/right/up orientation axes for visualization of attitude changes.
+    axis_scale = max(np.linalg.norm(vertices, axis=1).max(), 1.0)
+    forward_axis, = ax.plot([], [], [], color="tab:red", lw=1.2, label="Heading")
+    right_axis, = ax.plot([], [], [], color="tab:green", lw=1.2, label="Right")
+    up_axis, = ax.plot([], [], [], color="tab:purple", lw=1.2, label="Up")
+    roll_text = ax.text2D(0.02, 0.95, "", transform=ax.transAxes)
+
     ax.legend(loc="upper left")
 
     # Pre-compute bounding box to set axes limits.
@@ -332,8 +342,33 @@ def animate_simulation(
         mesh.set_verts([transformed[face] for face in faces])
         path_line.set_data(positions[: frame + 1, 0], positions[: frame + 1, 1])
         path_line.set_3d_properties(positions[: frame + 1, 2])
+
+        # Update orientation axes to highlight attitude changes.
+        origin = pos
+        forward_dir = orientation[:, 0]
+        right_dir = orientation[:, 1]
+        up_dir = orientation[:, 2]
+        forward_axis.set_data(
+            [origin[0], origin[0] + forward_dir[0] * axis_scale],
+            [origin[1], origin[1] + forward_dir[1] * axis_scale],
+        )
+        forward_axis.set_3d_properties(
+            [origin[2], origin[2] + forward_dir[2] * axis_scale]
+        )
+        right_axis.set_data(
+            [origin[0], origin[0] + right_dir[0] * axis_scale],
+            [origin[1], origin[1] + right_dir[1] * axis_scale],
+        )
+        right_axis.set_3d_properties([origin[2], origin[2] + right_dir[2] * axis_scale])
+        up_axis.set_data(
+            [origin[0], origin[0] + up_dir[0] * axis_scale],
+            [origin[1], origin[1] + up_dir[1] * axis_scale],
+        )
+        up_axis.set_3d_properties([origin[2], origin[2] + up_dir[2] * axis_scale])
+
+        roll_text.set_text(f"Roll: {result.roll_angles[frame]:.2f} rad")
         ax.set_title(f"Aircraft Motion Simulation\nTime = {times[frame]:.2f} s")
-        return mesh, path_line
+        return mesh, path_line, forward_axis, right_axis, up_axis, roll_text
 
     anim = animation.FuncAnimation(
         fig,
