@@ -12,6 +12,7 @@ animation of the aircraft moving along the computed path.
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
@@ -25,6 +26,96 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 Vector = np.ndarray
+
+
+def _axis_angle_to_matrix(axis: Vector, angle: float) -> np.ndarray:
+    """Return the rotation matrix for rotating ``angle`` radians about ``axis``."""
+
+    axis = normalize(np.asarray(axis, dtype=float))
+    x, y, z = axis
+    cos_t = math.cos(angle)
+    sin_t = math.sin(angle)
+    one_minus_cos = 1.0 - cos_t
+
+    # Skew-symmetric cross-product matrix of the axis vector.
+    k = np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+    identity = np.eye(3)
+    return identity + sin_t * k + one_minus_cos * (k @ k)
+
+
+def translate_model_to_center(
+    geometry, target_center: Iterable[float], reference_point: Iterable[float] | None = None
+):
+    """Translate an Open3D geometry so the local reference point matches ``target_center``.
+
+    Parameters
+    ----------
+    geometry:
+        Any Open3D geometry supporting :meth:`transform`.
+    target_center:
+        The world-space coordinates where the geometry's local origin/reference point
+        should be placed.  When replaying poses exported by :func:`simulate_flight`, this
+        should be one of the recorded aircraft positions.
+    reference_point:
+        Optional local reference point to align with ``target_center``.  When ``None`` the
+        function assumes the simulation treated the model's local origin (``[0, 0, 0]``)
+        as the anchor.
+
+    Returns
+    -------
+    geometry:
+        A new geometry instance that has been translated without mutating the input.
+    """
+
+    target_center = np.asarray(target_center, dtype=float)
+    if reference_point is None:
+        reference_point = np.zeros(3)
+    else:
+        reference_point = np.asarray(reference_point, dtype=float)
+
+    translation_vector = target_center - reference_point
+
+    transform = np.eye(4)
+    transform[:3, 3] = translation_vector
+
+    translated_geometry = copy.deepcopy(geometry)
+    translated_geometry.transform(transform)
+    return translated_geometry
+
+
+def rotate_model(
+    geometry,
+    axis: Iterable[float],
+    angle_deg: float,
+    center: Iterable[float] | None = None,
+):
+    """Rotate ``geometry`` around ``axis`` by ``angle_deg`` degrees.
+
+    Unlike many simple helpers that rotate around the geometry's bounding-box centre, this
+    function defaults to rotating around the world origin.  This matches the convention
+    used when converting the simulation results into poses, ensuring that the exported
+    positions remain valid anchors after rotation is applied.
+    """
+
+    axis = np.asarray(axis, dtype=float)
+    if np.linalg.norm(axis) < 1e-6:
+        raise ValueError("旋转轴长度不能为零")
+
+    angle_rad = math.radians(angle_deg)
+    rotation_matrix = _axis_angle_to_matrix(axis, angle_rad)
+
+    if center is None:
+        center = np.zeros(3)
+    else:
+        center = np.asarray(center, dtype=float)
+
+    transform = np.eye(4)
+    transform[:3, :3] = rotation_matrix
+    transform[:3, 3] = center - rotation_matrix @ center
+
+    rotated_geometry = copy.deepcopy(geometry)
+    rotated_geometry.transform(transform)
+    return rotated_geometry
 
 
 @dataclass
