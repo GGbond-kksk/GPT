@@ -41,7 +41,7 @@ class FlightSegment:
 
 
 class ObjModel:
-    """Simple OBJ loader that supports vertices and triangular faces."""
+    """Simple OBJ wrapper backed by Open3D triangle meshes."""
 
     def __init__(self, vertices: np.ndarray, faces: List[List[int]]):
         self.vertices = vertices.astype(float)
@@ -49,25 +49,25 @@ class ObjModel:
 
     @classmethod
     def load(cls, path: Path) -> "ObjModel":
-        vertices: List[List[float]] = []
-        faces: List[List[int]] = []
-        with path.open("r", encoding="utf-8") as obj_file:
-            for line in obj_file:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parts = line.split()
-                if parts[0] == "v" and len(parts) >= 4:
-                    vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
-                elif parts[0] == "f" and len(parts) >= 4:
-                    face_indices = []
-                    for part in parts[1:4]:
-                        idx = part.split("/")[0]
-                        face_indices.append(int(idx) - 1)
-                    faces.append(face_indices)
-        if not vertices or not faces:
-            raise ValueError("OBJ model must contain at least one vertex and face")
-        return cls(np.array(vertices), faces)
+        try:
+            import open3d as o3d
+        except ImportError as exc:
+            raise ImportError(
+                "The 'open3d' package is required to load OBJ models. "
+                "Install it with `pip install open3d`."
+            ) from exc
+
+        mesh = o3d.io.read_triangle_mesh(str(path))
+        if mesh.is_empty():
+            raise ValueError(f"Failed to load mesh from {path}")
+
+        vertices = np.asarray(mesh.vertices, dtype=float)
+        faces_array = np.asarray(mesh.triangles, dtype=int)
+        if vertices.size == 0 or faces_array.size == 0:
+            raise ValueError("OBJ model must contain vertices and triangular faces")
+
+        faces = faces_array.tolist()
+        return cls(vertices, faces)
 
 
 def normalize(vec: Vector) -> Vector:
