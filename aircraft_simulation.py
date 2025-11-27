@@ -18,6 +18,7 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 import math
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -384,6 +385,45 @@ def animate_simulation(
     return anim
 
 
+def save_result_to_excel(result: SimulationResult, filename: str | Path) -> None:
+    """Persist simulation results to an Excel workbook."""
+
+    records: List[Dict[str, float]] = []
+    for step, (time, position, heading, roll, orientation) in enumerate(
+        zip(result.times, result.positions, result.headings, result.roll_angles, result.orientations)
+    ):
+        forward = orientation[:, 0]
+        right = orientation[:, 1]
+        up = orientation[:, 2]
+        records.append(
+            {
+                "Time_Step": step,
+                "Time": float(time),
+                "Aircraft_Position_X": float(position[0]),
+                "Aircraft_Position_Y": float(position[1]),
+                "Aircraft_Position_Z": float(position[2]),
+                "Aircraft_Direction_X": float(heading[0]),
+                "Aircraft_Direction_Y": float(heading[1]),
+                "Aircraft_Direction_Z": float(heading[2]),
+                "Aircraft_Forward_X": float(forward[0]),
+                "Aircraft_Forward_Y": float(forward[1]),
+                "Aircraft_Forward_Z": float(forward[2]),
+                "Aircraft_Right_X": float(right[0]),
+                "Aircraft_Right_Y": float(right[1]),
+                "Aircraft_Right_Z": float(right[2]),
+                "Aircraft_Up_X": float(up[0]),
+                "Aircraft_Up_Y": float(up[1]),
+                "Aircraft_Up_Z": float(up[2]),
+                "Aircraft_Roll": float(roll),
+            }
+        )
+
+    df = pd.DataFrame.from_records(records)
+    output_path = Path(filename)
+    df.to_excel(output_path, index=False)
+    print(f"Simulation data saved to {output_path}")
+
+
 def print_summary(result: SimulationResult) -> None:
     """Print table of position, heading, and roll angle for each time step."""
     header = f"{'Step':>4} {'Time(s)':>8} {'X(m)':>10} {'Y(m)':>10} {'Z(m)':>10}"
@@ -446,6 +486,7 @@ def main() -> None:
     model, result = demo_configuration()
     print_summary(result)
     anim = animate_simulation(model, result)
+    save_result_to_excel(result, Path("simulation_output.xlsx"))
     plt.show()
 
 
